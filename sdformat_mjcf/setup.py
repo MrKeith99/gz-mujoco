@@ -44,8 +44,10 @@ setup(
     },
     install_requires=[
         'dm-control',
+        'DracoPy',
         'numpy',
         'pillow',
+        'pygltflib',
         'pycollada',
         'trimesh',
     ],

@@ -68,6 +68,33 @@ def make_glb(path):
     trimesh.Scene([textured, plain]).export(path)
 
 
+def make_draco_glb(path):
+    """A unit box stored with KHR_draco_mesh_compression."""
+    import DracoPy
+    import pygltflib as gl
+    box = trimesh.creation.box()
+    points = np.asarray(box.vertices, dtype=np.float32)
+    encoded = DracoPy.encode(points, np.asarray(box.faces, dtype=np.uint32))
+    draco = {"bufferView": 0, "attributes": {"POSITION": 0}}
+    gltf = gl.GLTF2(
+        scene=0, scenes=[gl.Scene(nodes=[0])], nodes=[gl.Node(mesh=0)],
+        meshes=[gl.Mesh(primitives=[gl.Primitive(
+            attributes=gl.Attributes(POSITION=0), indices=1,
+            extensions={"KHR_draco_mesh_compression": draco})])],
+        accessors=[
+            gl.Accessor(componentType=gl.FLOAT, count=len(points),
+                        type=gl.VEC3, min=points.min(0).tolist(),
+                        max=points.max(0).tolist()),
+            gl.Accessor(componentType=gl.UNSIGNED_INT,
+                        count=box.faces.size, type=gl.SCALAR)],
+        bufferViews=[gl.BufferView(buffer=0, byteLength=len(encoded))],
+        buffers=[gl.Buffer(byteLength=len(encoded))],
+        extensionsUsed=["KHR_draco_mesh_compression"],
+        extensionsRequired=["KHR_draco_mesh_compression"])
+    gltf.set_binary_blob(encoded)
+    gltf.save(path)
+
+
 class MeshIoTest(unittest.TestCase):
 
     def setUp(self):
@@ -97,6 +124,16 @@ class MeshIoTest(unittest.TestCase):
         self.assertEqual(1, len(groups))
         self.assertIsNone(groups[0].texture_png)
         self.assertEqual(16, groups[0].obj.count(b"\nv ") + 1)
+
+    def test_draco_glb(self):
+        path = os.path.join(self.tmp.name, "draco.glb")
+        make_draco_glb(path)
+        groups = mesh_io.convert_mesh(path)
+        self.assertEqual(1, len(groups))
+        vertices = np.array([[float(c) for c in line.split()[1:]]
+                             for line in groups[0].obj.decode().splitlines()
+                             if line.startswith("v ")])
+        assert_allclose([1, 1, 1], np.ptp(vertices, axis=0), atol=1e-3)
 
     def test_dae_unit_is_applied(self):
         path = os.path.join(self.tmp.name, "tri.DAE")

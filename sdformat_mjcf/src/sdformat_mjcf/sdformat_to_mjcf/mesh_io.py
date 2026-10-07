@@ -107,16 +107,83 @@ def _obj_bytes(parts, with_uv):
     return ("\n".join(vertex_lines + uv_lines + face_lines) + "\n").encode()
 
 
+def _decompress_draco(path):
+    """
+    trimesh ignores `KHR_draco_mesh_compression` and silently loads all-zero
+    vertices, so such files are rewritten with plain buffers first.
+    :return: The uncompressed GLB bytes, or None if `path` is not compressed.
+    """
+    import pygltflib
+    gltf = pygltflib.GLTF2().load(path)
+    if "KHR_draco_mesh_compression" not in (gltf.extensionsUsed or []):
+        return None
+    import DracoPy
+    gltf.convert_buffers(pygltflib.BufferFormat.BINARYBLOB)
+    blob = bytearray(gltf.binary_blob())
+
+    def add_accessor_data(accessor_index, array):
+        while len(blob) % 4:
+            blob.append(0)
+        accessor = gltf.accessors[accessor_index]
+        accessor.bufferView = len(gltf.bufferViews)
+        accessor.byteOffset = 0
+        gltf.bufferViews.append(pygltflib.BufferView(
+            buffer=0, byteOffset=len(blob), byteLength=array.nbytes))
+        blob.extend(array.tobytes())
+        return accessor
+
+    for mesh in gltf.meshes:
+        for prim in mesh.primitives:
+            draco = (prim.extensions or {}).pop("KHR_draco_mesh_compression",
+                                                None)
+            if draco is None:
+                continue
+            view = gltf.bufferViews[draco["bufferView"]]
+            end = view.byteOffset + view.byteLength
+            data = bytes(blob[view.byteOffset:end])
+            decoded = DracoPy.decode(data)
+            decoded_attrs = {"POSITION": decoded.points,
+                             "NORMAL": decoded.normals,
+                             "TEXCOORD_0": decoded.tex_coord,
+                             "COLOR_0": decoded.colors}
+            for name, index in draco["attributes"].items():
+                array = decoded_attrs.get(name)
+                if array is None:
+                    raise RuntimeError(
+                        f"Unsupported Draco attribute {name} in {path}")
+                array = np.ascontiguousarray(array, dtype=np.float32)
+                accessor = add_accessor_data(index, array)
+                if name == "POSITION":
+                    accessor.min = array.min(axis=0).tolist()
+                    accessor.max = array.max(axis=0).tolist()
+            indices = np.ascontiguousarray(decoded.faces, dtype=np.uint32)
+            accessor = add_accessor_data(prim.indices, indices.reshape(-1))
+            accessor.componentType = pygltflib.UNSIGNED_INT
+    gltf.buffers[0].byteLength = len(blob)
+    gltf.set_binary_blob(bytes(blob))
+    for names in (gltf.extensionsUsed, gltf.extensionsRequired):
+        if names and "KHR_draco_mesh_compression" in names:
+            names.remove("KHR_draco_mesh_compression")
+    return b"".join(gltf.save_to_bytes())
+
+
 @functools.lru_cache(maxsize=None)
 def _convert(path, merge, mtime):
     import trimesh
     ext = os.path.splitext(path)[1].lower().lstrip(".")
-    scene = trimesh.load(path, file_type=ext, force="scene")
+    uncompressed = _decompress_draco(path) if ext in ("glb", "gltf") else None
+    if uncompressed is not None:
+        scene = trimesh.load(io.BytesIO(uncompressed), file_type="glb",
+                             force="scene")
+    else:
+        scene = trimesh.load(path, file_type=ext, force="scene")
     scale = _unit_scale(path)
     # `dump` bakes the scene graph transforms into the vertices.
     meshes = [m for m in scene.dump() if len(m.faces)]
     if not meshes:
         raise RuntimeError(f"Mesh {path} has no triangles")
+    if all(np.ptp(m.vertices, axis=0).max() == 0 for m in meshes):
+        raise RuntimeError(f"Mesh {path} has all vertices at one point")
 
     groups = {}
     for mesh in meshes:
