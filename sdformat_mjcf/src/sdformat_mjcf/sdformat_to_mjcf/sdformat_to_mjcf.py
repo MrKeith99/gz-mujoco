@@ -54,7 +54,8 @@ def _export(mjcf_root, output_dir, file_name):
 def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
                           mesh_inertia_shell=False, use_quat=False,
                           max_friction=1.0, plane_as_box=False,
-                          convex_decomposition=False, coacd_threshold=0.05):
+                          convex_decomposition=False, coacd_threshold=0.05,
+                          coacd_cache=True):
     """
     Loads an SDFormat input file and converts to MJCF.
     :param str input_file: Path to input SDFormat Model or World file
@@ -73,6 +74,7 @@ def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
     :param bool convex_decomposition: Split collision meshes into convex
     hulls with CoACD (`pip install coacd`).
     :param float coacd_threshold: CoACD concavity threshold.
+    :param bool coacd_cache: Reuse decompositions cached on disk.
     """
     su.options.mesh_inertia_shell = mesh_inertia_shell
     su.options.use_quat = use_quat
@@ -81,6 +83,7 @@ def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
     su.options.plane_as_box = plane_as_box
     su.options.convex_decomposition = convex_decomposition
     su.options.coacd_threshold = coacd_threshold
+    su.options.coacd_cache = coacd_cache
     paths = su.collect_model_paths(model_paths)
     su.set_model_paths(paths)
     # The global config is not honored by `Root.load` in the Python bindings.

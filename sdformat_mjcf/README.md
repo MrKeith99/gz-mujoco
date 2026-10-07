@@ -46,6 +46,7 @@ Use the commnad line tool `sdf2mjcf`:
 usage: sdf2mjcf [-h] [--model-path DIR] [--mesh-inertia-shell] [--use-quat]
                 [--max-friction MAX_FRICTION] [--plane-as-box]
                 [--convex-decomposition] [--coacd-threshold THRESHOLD]
+                [--no-cache]
                 input_file output_file
 
 positional arguments:
@@ -80,7 +81,9 @@ MuJoCo collides meshes as their convex hull, so a concave collision mesh such
 as an open shelf becomes a solid block. `--convex-decomposition` splits each
 non-convex collision mesh into several hulls (one geom each, named
 `<geom>_hNN`) so that cavities are kept. It is slow (seconds per mesh) and
-only applies to collisions, not visuals.
+only applies to collisions, not visuals. Results are cached in
+`$SDFORMAT_MJCF_CACHE_DIR` (default `~/.cache/sdformat_mjcf/coacd`), keyed by
+the mesh contents and settings; `--no-cache` bypasses the cache.
 
 Meshes and textures are written to an `assets` directory next to the output
 file, which the generated MJCF references through `meshdir` and `texturedir`.

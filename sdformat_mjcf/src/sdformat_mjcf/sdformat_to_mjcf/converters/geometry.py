@@ -141,7 +141,8 @@ def _add_mesh_geoms(body, name, pose, mesh_shape, visual):
         groups = [None]
 
     if not visual and su.options.convex_decomposition:
-        hulls = mesh_io.convex_decompose(path, su.options.coacd_threshold)
+        hulls = mesh_io.convex_decompose(
+            path, su.options.coacd_threshold, su.options.coacd_cache)
         if hulls:
             return _add_hull_geoms(body, name, pose, base, path, hulls,
                                    mesh_args)

@@ -55,6 +55,10 @@ def main(argv=None):
     parser.add_argument("--coacd-threshold", type=float, default=0.05,
                         help="CoACD concavity threshold (default: "
                         "%(default)s). Lower is more precise.")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Do not read or write the on-disk cache of "
+                        "convex decompositions ($SDFORMAT_MJCF_CACHE_DIR or "
+                        "~/.cache/sdformat_mjcf/coacd).")
 
     args = parser.parse_args(argv)
     return sdformat_file_to_mjcf(args.input_file, args.output_file,
@@ -65,7 +69,8 @@ def main(argv=None):
                                  plane_as_box=args.plane_as_box,
                                  convex_decomposition=(
                                      args.convex_decomposition),
-                                 coacd_threshold=args.coacd_threshold)
+                                 coacd_threshold=args.coacd_threshold,
+                                 coacd_cache=not args.no_cache)
 
 
 if __name__ == "__main__":

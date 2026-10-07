@@ -16,6 +16,7 @@ import io
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 import trimesh
@@ -257,6 +258,10 @@ class ConvexDecompositionTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         os.chdir(TEST_RESOURCES_DIR)
+        env = mock.patch.dict(os.environ, {
+            "SDFORMAT_MJCF_CACHE_DIR": os.path.join(self.tmp.name, "cache")})
+        env.start()
+        self.addCleanup(env.stop)
         # A U-shaped (non-convex) block and a convex box, as STL files.
         parts = [trimesh.creation.box([1, 0.2, 1]),
                  trimesh.creation.box([1, 0.2, 1]),
@@ -285,6 +290,28 @@ class ConvexDecompositionTest(unittest.TestCase):
         self.assertEqual(physics.model.nmesh, physics.model.ngeom - 1)
         assets = os.listdir(os.path.join(self.tmp.name, "out", "assets"))
         self.assertIn("model_u_collision_hull00.obj", assets)
+
+    def test_disk_cache_is_reused(self):
+        cache = os.path.join(self.tmp.name, "cache")
+        flags = ("--convex-decomposition", "--coacd-threshold", "0.1")
+        with mock.patch.dict(os.environ, {"SDFORMAT_MJCF_CACHE_DIR": cache}):
+            first = self.convert("u.stl", *flags)
+            entries = os.listdir(cache)
+            self.assertEqual(1, len(entries))
+            hulls = os.listdir(os.path.join(cache, entries[0]))
+            self.assertIn("info.json", hulls)
+            # A new process starts without the in-memory cache.
+            mesh_io._decompose.cache_clear()
+            with mock.patch.object(coacd, "run_coacd") as run_coacd:
+                second = self.convert("u.stl", *flags)
+                run_coacd.assert_not_called()
+            self.assertEqual(first.model.nmesh, second.model.nmesh)
+            mesh_io._decompose.cache_clear()
+            with mock.patch.object(coacd, "run_coacd",
+                                   side_effect=RuntimeError) as run_coacd:
+                with self.assertRaises(RuntimeError):
+                    self.convert("u.stl", *flags, "--no-cache")
+                run_coacd.assert_called_once()
 
     def test_flag_off_keeps_single_geom(self):
         physics = self.convert("u.stl")

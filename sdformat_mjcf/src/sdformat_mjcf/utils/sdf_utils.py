@@ -47,6 +47,8 @@ class ConversionOptions:
     # Split collision meshes into convex hulls with CoACD.
     convex_decomposition = False
     coacd_threshold = 0.05
+    # Keep convex decompositions on disk between runs.
+    coacd_cache = True
 
 
 options = ConversionOptions()

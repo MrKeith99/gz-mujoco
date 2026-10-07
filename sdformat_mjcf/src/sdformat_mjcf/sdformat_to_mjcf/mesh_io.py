@@ -16,7 +16,9 @@
 to OBJ files, one per material group, together with their textures."""
 
 import functools
+import hashlib
 import io
+import json
 import logging
 import os
 import re
@@ -212,48 +214,96 @@ def _convert(path, merge, mtime):
     return tuple(result)
 
 
+COACD_PARAMS = {"max_convex_hull": -1, "preprocess_mode": "auto",
+                "resolution": 2000, "seed": 0}
+
+
+def _cache_dir(key):
+    root = os.environ.get("SDFORMAT_MJCF_CACHE_DIR") or os.path.join(
+        os.path.expanduser("~"), ".cache", "sdformat_mjcf", "coacd")
+    return os.path.join(root, key)
+
+
+def _read_cached_hulls(directory):
+    try:
+        with open(os.path.join(directory, "info.json")) as f:
+            count = json.load(f)["hulls"]
+        hulls = []
+        for i in range(count):
+            with open(os.path.join(directory, f"hull_{i:02d}.obj"),
+                      "rb") as f:
+                hulls.append(f.read())
+        return tuple(hulls)
+    except (OSError, KeyError, ValueError):
+        return None
+
+
 @functools.lru_cache(maxsize=None)
-def _decompose(path, threshold, mtime):
+def _decompose(path, threshold, mtime, use_cache):
+    import trimesh
+    if needs_conversion(path):
+        obj = _convert(path, True, mtime)[0].obj
+        mesh = trimesh.load(io.BytesIO(obj), file_type="obj", force="mesh")
+        source = obj
+    else:
+        mesh = trimesh.load(path, force="mesh")
+        with open(path, "rb") as f:
+            source = f.read()
+    # Already convex meshes are best left as MuJoCo's single hull.
+    if mesh.is_convex:
+        return ()
+
+    key = hashlib.sha1(source + repr((threshold, sorted(
+        COACD_PARAMS.items()))).encode()).hexdigest()
+    directory = _cache_dir(key)
+    if use_cache:
+        hulls = _read_cached_hulls(directory)
+        if hulls is not None:
+            logging.warning("Convex decomposition cache hit: %s (%d hulls)",
+                            os.path.basename(path), len(hulls))
+            return hulls if len(hulls) >= 3 else ()
+
     try:
         import coacd
     except ImportError as e:
         raise RuntimeError(
             "Convex decomposition needs the coacd package: "
             "pip install coacd") from e
-    import trimesh
-    if needs_conversion(path):
-        obj = _convert(path, True, mtime)[0].obj
-        mesh = trimesh.load(io.BytesIO(obj), file_type="obj", force="mesh")
-    else:
-        mesh = trimesh.load(path, force="mesh")
-    # Already convex meshes are best left as MuJoCo's single hull.
-    if mesh.is_convex:
-        return ()
     coacd.set_log_level("error")
     start = time.time()
-    parts = coacd.run_coacd(
-        coacd.Mesh(mesh.vertices, mesh.faces), threshold=threshold,
-        max_convex_hull=-1, preprocess_mode="auto", resolution=2000, seed=0)
-    # Shown by default, unlike INFO.
+    parts = coacd.run_coacd(coacd.Mesh(mesh.vertices, mesh.faces),
+                            threshold=threshold, **COACD_PARAMS)
+    elapsed = time.time() - start
     logging.warning("Convex decomposition of %s: %d hulls in %.1f s", path,
-                    len(parts), time.time() - start)
-    if len(parts) < 3:
-        return ()
-    return tuple(_obj_bytes([(v, f, None)], False) for v, f in parts)
+                    len(parts), elapsed)
+    hulls = tuple(_obj_bytes([(v, f, None)], False) for v, f in parts)
+    if use_cache:
+        os.makedirs(directory, exist_ok=True)
+        for i, hull in enumerate(hulls):
+            with open(os.path.join(directory, f"hull_{i:02d}.obj"),
+                      "wb") as f:
+                f.write(hull)
+        with open(os.path.join(directory, "info.json"), "w") as f:
+            json.dump({"hulls": len(hulls), "seconds": elapsed}, f)
+    return hulls if len(hulls) >= 3 else ()
 
 
-def convex_decompose(path, threshold=0.05):
+def convex_decompose(path, threshold=0.05, use_cache=True):
     """
     Split a collision mesh into convex hulls with CoACD, so that concave
     shapes (e.g. an open shelf) keep their cavities in MuJoCo.
+
+    Results are also cached on disk, in `$SDFORMAT_MJCF_CACHE_DIR` or
+    `~/.cache/sdformat_mjcf/coacd`, keyed by the mesh contents and settings.
     :param str path: Path of the mesh file, in any supported format.
     :param float threshold: CoACD concavity threshold, lower is more precise.
+    :param bool use_cache: Whether to use the on-disk cache.
     :return: OBJ bytes of each hull, or an empty tuple if the mesh is already
     convex or decomposes into fewer than 3 hulls.
     :rtype: tuple[bytes]
     """
     return _decompose(os.path.abspath(path), threshold,
-                      os.path.getmtime(path))
+                      os.path.getmtime(path), use_cache)
 
 
 def convert_mesh(path, merge=False):
