@@ -42,6 +42,8 @@ class ConversionOptions:
     max_friction = 1.0
     # Friction values already warned about.
     clamped_friction = set()
+    # Export finite SDFormat planes as thin static boxes.
+    plane_as_box = False
 
 
 options = ConversionOptions()

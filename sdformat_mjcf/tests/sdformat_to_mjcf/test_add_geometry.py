@@ -140,6 +140,24 @@ class GeometryTest(helpers.TestCase):
         mj_mesh = mujoco.asset.mesh[0]
         assert_allclose([0.1, 0.2, 0.3], mj_mesh.scale)
 
+    def test_plane_as_box(self):
+        plane = sdf.Plane()
+        plane.set_size(Vector2d(10., 6.))
+        geometry = sdf.Geometry()
+        geometry.set_plane_shape(plane)
+        geometry.set_type(sdf.GeometryType.PLANE)
+
+        mujoco = mjcf.RootElement(model="test")
+        body = mujoco.worldbody.add('body')
+        su.options.plane_as_box = True
+        self.addCleanup(setattr, su.options, "plane_as_box", False)
+        mj_geom = geometry_conv.add_geometry(
+            body, "floor", Pose3d(1, 2, 3, 0, 0, 0), geometry)
+        self.assertEqual("box", mj_geom.type)
+        assert_allclose([5., 3., 0.005], mj_geom.size)
+        # The top face stays at the plane height.
+        assert_allclose([1., 2., 3. - 0.005], mj_geom.pos)
+
     def test_plane(self):
         plane = sdf.Plane()
         x_size = 5.

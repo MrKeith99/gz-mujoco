@@ -18,11 +18,14 @@ import hashlib
 import logging
 import os
 
+from gz.math import Vector3d
+
 import sdformat_mjcf.utils.sdf_utils as su
 from sdformat_mjcf.sdformat_to_mjcf import mesh_io
 
 COLLISION_GEOM_GROUP = 3
 VISUAL_GEOM_GROUP = 0
+PLANE_BOX_HALF_THICKNESS = 0.005
 
 
 def add_geometry(body, name, pose, sdf_geom, visual=False):
@@ -59,10 +62,15 @@ def add_geometries(body, name, pose, sdf_geom, visual=False):
     if sdf_geom.mesh_shape():
         return _add_mesh_geoms(body, name, pose, sdf_geom.mesh_shape(),
                                visual)
+    pos = pose.pos()
+    plane_as_box = su.options.plane_as_box and sdf_geom.plane_shape()
+    if plane_as_box:
+        # The box top face lies on the plane.
+        pos = pos + pose.rot() * Vector3d(0, 0, -PLANE_BOX_HALF_THICKNESS)
     geom = body.add(
         "geom",
         name=su.find_unique_name(body, "geom", name),
-        pos=su.vec3d_to_list(pose.pos()),
+        pos=su.vec3d_to_list(pos),
         **su.rotation_attrs(pose.rot()),
     )
 
@@ -84,11 +92,16 @@ def add_geometries(body, name, pose, sdf_geom, visual=False):
         geom.size = su.vec3d_to_list(ellipsoid_shape.radii())
     elif sdf_geom.plane_shape():
         plane_shape = sdf_geom.plane_shape()
-        geom.type = "plane"
-        # The third element of size defines the spacing between square grid
-        # lines for rendering.
-        # TODO (azeey) Consider making this configurable
-        geom.size = su.vec2d_to_list(plane_shape.size() / 2.0) + [1]
+        half_size = su.vec2d_to_list(plane_shape.size() / 2.0)
+        if plane_as_box:
+            geom.type = "box"
+            geom.size = half_size + [PLANE_BOX_HALF_THICKNESS]
+        else:
+            geom.type = "plane"
+            # The third element of size defines the spacing between square
+            # grid lines for rendering.
+            # TODO (azeey) Consider making this configurable
+            geom.size = half_size + [1]
     elif sdf_geom.sphere_shape():
         sphere_shape = sdf_geom.sphere_shape()
         geom.type = "sphere"

@@ -45,13 +45,17 @@ def main(argv=None):
                         help="Upper bound of the sliding friction (default: "
                         "%(default)s). Larger //surface/friction/ode/mu "
                         "values are clamped with a warning.")
+    parser.add_argument("--plane-as-box", action="store_true",
+                        help="Export planes as thin static boxes, keeping "
+                        "their finite size, instead of infinite planes.")
 
     args = parser.parse_args(argv)
     return sdformat_file_to_mjcf(args.input_file, args.output_file,
                                  model_paths=args.model_path,
                                  mesh_inertia_shell=args.mesh_inertia_shell,
                                  use_quat=args.use_quat,
-                                 max_friction=args.max_friction)
+                                 max_friction=args.max_friction,
+                                 plane_as_box=args.plane_as_box)
 
 
 if __name__ == "__main__":
