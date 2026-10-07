@@ -38,11 +38,15 @@ def main(argv=None):
     parser.add_argument("--mesh-inertia-shell", action="store_true",
                         help="Set inertia=\"shell\" on visual meshes so thin "
                         "meshes compile. Requires MuJoCo >= 3.2.5.")
+    parser.add_argument("--use-quat", action="store_true",
+                        help="Write rotations as quaternions instead of "
+                        "euler angles.")
 
     args = parser.parse_args(argv)
     return sdformat_file_to_mjcf(args.input_file, args.output_file,
                                  model_paths=args.model_path,
-                                 mesh_inertia_shell=args.mesh_inertia_shell)
+                                 mesh_inertia_shell=args.mesh_inertia_shell,
+                                 use_quat=args.use_quat)
 
 
 if __name__ == "__main__":

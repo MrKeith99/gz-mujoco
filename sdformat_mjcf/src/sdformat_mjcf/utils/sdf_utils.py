@@ -173,6 +173,19 @@ def quat_to_euler_list(quat):
     return [math.degrees(val) for val in vec3d_to_list(quat.euler())]
 
 
+def rotation_attrs(quat):
+    """
+    Build the MJCF attribute holding a rotation, `quat` if the `use_quat`
+    option is set and `euler` (degrees) otherwise.
+    :param gz.math.Quaterniond quat: The rotation.
+    :return: A dict to be unpacked as keyword arguments of `Element.add`.
+    :rtype: dict
+    """
+    if options.use_quat:
+        return {"quat": quat_to_list(quat)}
+    return {"euler": quat_to_euler_list(quat)}
+
+
 def wxyz_list_to_quat(quat):
     """
     Convert a Quaternion list defined as wxyz to a gz.math.Quateriond.

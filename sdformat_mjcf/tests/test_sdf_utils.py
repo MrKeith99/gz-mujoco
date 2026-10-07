@@ -18,7 +18,8 @@ import unittest
 from unittest import mock
 
 import sdformat as sdf
-from gz.math import Pose3d, Vector3d
+from gz.math import Pose3d, Quaterniond, Vector3d
+from numpy.testing import assert_allclose
 
 from tests import helpers
 import sdformat_mjcf.utils.sdf_utils as su
@@ -105,6 +106,25 @@ class ResolveUriTest(unittest.TestCase):
         with mock.patch.dict(os.environ, env):
             self.assertEqual(["/cli", "/s1", "/s2", "/g1"],
                              su.collect_model_paths(["/cli"]))
+
+
+class RotationAttrsTest(unittest.TestCase):
+
+    quat = Quaterniond(Vector3d(0.3, -0.2, 1.0))
+
+    def tearDown(self):
+        su.options.use_quat = False
+
+    def test_euler_by_default(self):
+        attrs = su.rotation_attrs(self.quat)
+        self.assertEqual(["euler"], list(attrs))
+        assert_allclose(su.quat_to_euler_list(self.quat), attrs["euler"])
+
+    def test_quat(self):
+        su.options.use_quat = True
+        attrs = su.rotation_attrs(self.quat)
+        self.assertEqual(["quat"], list(attrs))
+        assert_allclose(su.quat_to_list(self.quat), attrs["quat"])
 
 
 if __name__ == "__main__":

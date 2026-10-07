@@ -14,6 +14,7 @@
 
 
 from dm_control import mjcf
+import sdformat_mjcf.utils.sdf_utils as su
 from sdformat_mjcf.sdformat_to_mjcf.converters.model import add_model
 from sdformat_mjcf.sdformat_to_mjcf.converters.world import add_world
 
@@ -27,7 +28,8 @@ def add_root(root):
     :rtype: mjcf.RootElement
     """
     mjcf_root = mjcf.RootElement()
-    mjcf_root.compiler.eulerseq = 'XYZ'
+    if not su.options.use_quat:
+        mjcf_root.compiler.eulerseq = 'XYZ'
     if root.model():
         mjcf_root.model = root.model().name()
     elif root.world_count() == 1:

@@ -20,6 +20,7 @@ import os
 from os import path
 from unittest import mock
 import numpy as np
+from numpy.testing import assert_allclose
 from dm_control import mujoco
 
 from sdformat_mjcf.sdformat_to_mjcf import cli
@@ -70,6 +71,7 @@ class CLITest(unittest.TestCase):
     def test_relative_output_dir(self):
         model_file = TEST_RESOURCES_DIR / "double_pendulum.sdf"
         with tempfile.TemporaryDirectory() as temp_dir:
+            self.addCleanup(os.chdir, os.getcwd())
             os.chdir(temp_dir)
             os.mkdir("mjcf")
             output_file = path.join("mjcf", "double_pendulum.xml")
@@ -81,6 +83,7 @@ class CLITest(unittest.TestCase):
         model_dir = TEST_RESOURCES_DIR / "box_obj"
         model_file = model_dir / "model.sdf"
         with tempfile.TemporaryDirectory() as temp_dir:
+            self.addCleanup(os.chdir, os.getcwd())
             os.chdir(temp_dir)
             os.mkdir("mjcf")
             self.assertNotEqual(os.getcwd(), str(model_dir))
@@ -118,6 +121,36 @@ class CLITest(unittest.TestCase):
             env = {"GZ_SIM_RESOURCE_PATH": str(TEST_RESOURCES_DIR)}
             with mock.patch.dict(os.environ, env):
                 self.assertEqual(0, cli.main([str(model_file), output_file]))
+
+    def test_use_quat(self):
+        model_file = TEST_RESOURCES_DIR / "double_pendulum.sdf"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            euler_file = path.join(temp_dir, "euler.xml")
+            quat_file = path.join(temp_dir, "quat.xml")
+            self.assertEqual(0, cli.main([str(model_file), euler_file]))
+            self.assertEqual(0, cli.main([str(model_file), quat_file,
+                                          "--use-quat"]))
+            with open(euler_file) as f:
+                self.assertIn("euler", f.read())
+            with open(quat_file) as f:
+                xml = f.read()
+            self.assertNotIn("euler", xml)
+            self.assertIn("quat=", xml)
+            euler_model = mujoco.Physics.from_xml_path(euler_file)
+            quat_model = mujoco.Physics.from_xml_path(quat_file)
+            assert_allclose(euler_model.model.body_quat,
+                            quat_model.model.body_quat, atol=1e-6)
+            assert_allclose(euler_model.model.geom_quat,
+                            quat_model.model.geom_quat, atol=1e-6)
+
+    def test_use_quat_resets(self):
+        model_file = TEST_RESOURCES_DIR / "double_pendulum.sdf"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = path.join(temp_dir, "a.xml")
+            cli.main([str(model_file), output_file, "--use-quat"])
+            cli.main([str(model_file), output_file])
+            with open(output_file) as f:
+                self.assertIn("euler", f.read())
 
 
 if __name__ == "__main__":

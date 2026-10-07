@@ -99,12 +99,15 @@ def add_joint(body, joint):
                 # parent and child bodies respectively. SENSOR implies using
                 # the rotation of the sensor frame, but since this is set in
                 # `add_sensor`, we do nothing here.
-                if (ft_sensor.frame() == sdf.ForceTorqueFrame.PARENT
-                        and body.parent.euler is not None):  # noqa
-                    site.euler = body.parent.euler
-                elif (ft_sensor.frame() == sdf.ForceTorqueFrame.CHILD
-                      and body.euler is not None):  # noqa
-                    site.euler = body.euler
+                frame_body = None
+                if ft_sensor.frame() == sdf.ForceTorqueFrame.PARENT:
+                    frame_body = body.parent
+                elif ft_sensor.frame() == sdf.ForceTorqueFrame.CHILD:
+                    frame_body = body
+                if frame_body is not None:
+                    for attr in ("euler", "quat"):
+                        if getattr(frame_body, attr) is not None:
+                            setattr(site, attr, getattr(frame_body, attr))
 
     if joint.type() == sdf.JointType.FIXED:
         return None

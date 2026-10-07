@@ -62,7 +62,7 @@ def add_geometries(body, name, pose, sdf_geom, visual=False):
         "geom",
         name=su.find_unique_name(body, "geom", name),
         pos=su.vec3d_to_list(pose.pos()),
-        euler=su.quat_to_euler_list(pose.rot()),
+        **su.rotation_attrs(pose.rot()),
     )
 
     if sdf_geom.box_shape():
@@ -131,7 +131,7 @@ def _add_mesh_geoms(body, name, pose, mesh_shape, visual):
             name=su.find_unique_name(body, "geom", geom_name),
             type="mesh",
             pos=su.vec3d_to_list(pose.pos()),
-            euler=su.quat_to_euler_list(pose.rot()),
+            **su.rotation_attrs(pose.rot()),
         )
         key = (path, tuple(scale), visual, i)
         if group is None:
