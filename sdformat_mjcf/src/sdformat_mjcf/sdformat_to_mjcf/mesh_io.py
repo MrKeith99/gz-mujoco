@@ -17,8 +17,10 @@ to OBJ files, one per material group, together with their textures."""
 
 import functools
 import io
+import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -208,6 +210,50 @@ def _convert(path, merge, mtime):
             rgba=[float(c) for c in entry["rgba"]],
             texture_png=_png_bytes(entry["image"]) if textured else None))
     return tuple(result)
+
+
+@functools.lru_cache(maxsize=None)
+def _decompose(path, threshold, mtime):
+    try:
+        import coacd
+    except ImportError as e:
+        raise RuntimeError(
+            "Convex decomposition needs the coacd package: "
+            "pip install coacd") from e
+    import trimesh
+    if needs_conversion(path):
+        obj = _convert(path, True, mtime)[0].obj
+        mesh = trimesh.load(io.BytesIO(obj), file_type="obj", force="mesh")
+    else:
+        mesh = trimesh.load(path, force="mesh")
+    # Already convex meshes are best left as MuJoCo's single hull.
+    if mesh.is_convex:
+        return ()
+    coacd.set_log_level("error")
+    start = time.time()
+    parts = coacd.run_coacd(
+        coacd.Mesh(mesh.vertices, mesh.faces), threshold=threshold,
+        max_convex_hull=-1, preprocess_mode="auto", resolution=2000, seed=0)
+    # Shown by default, unlike INFO.
+    logging.warning("Convex decomposition of %s: %d hulls in %.1f s", path,
+                    len(parts), time.time() - start)
+    if len(parts) < 3:
+        return ()
+    return tuple(_obj_bytes([(v, f, None)], False) for v, f in parts)
+
+
+def convex_decompose(path, threshold=0.05):
+    """
+    Split a collision mesh into convex hulls with CoACD, so that concave
+    shapes (e.g. an open shelf) keep their cavities in MuJoCo.
+    :param str path: Path of the mesh file, in any supported format.
+    :param float threshold: CoACD concavity threshold, lower is more precise.
+    :return: OBJ bytes of each hull, or an empty tuple if the mesh is already
+    convex or decomposes into fewer than 3 hulls.
+    :rtype: tuple[bytes]
+    """
+    return _decompose(os.path.abspath(path), threshold,
+                      os.path.getmtime(path))
 
 
 def convert_mesh(path, merge=False):

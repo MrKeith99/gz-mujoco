@@ -44,6 +44,8 @@ Use the commnad line tool `sdf2mjcf`:
 
 ```bash
 usage: sdf2mjcf [-h] [--model-path DIR] [--mesh-inertia-shell] [--use-quat]
+                [--max-friction MAX_FRICTION] [--plane-as-box]
+                [--convex-decomposition] [--coacd-threshold THRESHOLD]
                 input_file output_file
 
 positional arguments:
@@ -59,7 +61,26 @@ optional arguments:
                         compile. Requires MuJoCo >= 3.2.5.
   --use-quat            Write rotations as quaternions instead of euler
                         angles.
+  --max-friction MAX_FRICTION
+                        Upper bound of the sliding friction (default: 1.0).
+                        Larger //surface/friction/ode/mu values are clamped
+                        with a warning.
+  --plane-as-box        Export planes as thin static boxes, keeping their
+                        finite size, instead of infinite planes.
+  --convex-decomposition
+                        Split collision meshes into convex hulls with CoACD
+                        (pip install coacd). Otherwise MuJoCo uses the convex
+                        hull of each collision mesh.
+  --coacd-threshold THRESHOLD
+                        CoACD concavity threshold (default: 0.05). Lower is
+                        more precise.
 ```
+
+MuJoCo collides meshes as their convex hull, so a concave collision mesh such
+as an open shelf becomes a solid block. `--convex-decomposition` splits each
+non-convex collision mesh into several hulls (one geom each, named
+`<geom>_hNN`) so that cavities are kept. It is slow (seconds per mesh) and
+only applies to collisions, not visuals.
 
 Meshes and textures are written to an `assets` directory next to the output
 file, which the generated MJCF references through `meshdir` and `texturedir`.
@@ -125,7 +146,8 @@ stated, SDFormat elements that affect the behavior of the simulator (i.e not the
 ## Unsupported by MJCF:
 
   - Mesh collisions are replaced by their convex hull, so concave collision
-    meshes such as an open shelf become a solid block.
+    meshes such as an open shelf become a solid block, unless
+    `--convex-decomposition` is used.
   - Only the diffuse (albedo) texture of a PBR material is converted. Other
     textures (normal, roughness, ...) are not supported.
   - Textures of primitive shapes are mapped differently than in Gazebo.

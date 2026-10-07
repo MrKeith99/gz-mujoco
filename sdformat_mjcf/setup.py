@@ -42,6 +42,9 @@ setup(
             'mjcf2sdf= sdformat_mjcf.mjcf_to_sdformat.cli:main',
         ],
     },
+    extras_require={
+        'coacd': ['coacd'],
+    },
     install_requires=[
         'dm-control',
         'DracoPy',

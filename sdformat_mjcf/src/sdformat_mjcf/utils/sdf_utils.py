@@ -44,6 +44,9 @@ class ConversionOptions:
     clamped_friction = set()
     # Export finite SDFormat planes as thin static boxes.
     plane_as_box = False
+    # Split collision meshes into convex hulls with CoACD.
+    convex_decomposition = False
+    coacd_threshold = 0.05
 
 
 options = ConversionOptions()

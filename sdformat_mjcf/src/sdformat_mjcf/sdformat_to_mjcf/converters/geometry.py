@@ -140,6 +140,12 @@ def _add_mesh_geoms(body, name, pose, mesh_shape, visual):
     else:
         groups = [None]
 
+    if not visual and su.options.convex_decomposition:
+        hulls = mesh_io.convex_decompose(path, su.options.coacd_threshold)
+        if hulls:
+            return _add_hull_geoms(body, name, pose, base, path, hulls,
+                                   mesh_args)
+
     geoms = []
     for i, group in enumerate(groups):
         geom_name = name if i == 0 else f"{name}{su.NAME_DELIMITER}{i}"
@@ -169,6 +175,24 @@ def _add_mesh_geoms(body, name, pose, mesh_shape, visual):
             if visual:
                 geom.material = _add_group_material(body, group, stem)
         geoms.append(geom)
+    return geoms
+
+
+def _add_hull_geoms(body, name, pose, base, path, hulls, mesh_args):
+    """Add one geom per convex hull of a decomposed collision mesh."""
+    geoms = []
+    for i, hull in enumerate(hulls):
+        stem = f"{base}_collision_hull{i:02d}"
+        prefix = su.claim_asset_stem(body.root, stem, ".obj",
+                                     (path, "hull", i))
+        mesh = _get_asset(
+            body, "mesh", (path, tuple(mesh_args["scale"]), "hull", i), stem,
+            file=su.file_asset(hull, ".obj", prefix), **mesh_args)
+        geoms.append(body.add(
+            "geom",
+            name=su.find_unique_name(body, "geom", f"{name}_h{i:02d}"),
+            type="mesh", mesh=mesh, pos=su.vec3d_to_list(pose.pos()),
+            **su.rotation_attrs(pose.rot())))
     return geoms
 
 
@@ -220,10 +244,11 @@ def add_collision(body, col):
     """
     sem_pose = col.semantic_pose()
     pose = su.graph_resolver.resolve_pose(sem_pose)
-    geom = add_geometry(body, col.name(), pose, col.geometry())
-    geom.group = COLLISION_GEOM_GROUP
-    apply_surface_to_geometry(geom, col.surface())
-    return geom
+    geoms = add_geometries(body, col.name(), pose, col.geometry())
+    for geom in geoms:
+        geom.group = COLLISION_GEOM_GROUP
+        apply_surface_to_geometry(geom, col.surface())
+    return geoms[0]
 
 
 def add_visual(body, vis):

@@ -48,6 +48,13 @@ def main(argv=None):
     parser.add_argument("--plane-as-box", action="store_true",
                         help="Export planes as thin static boxes, keeping "
                         "their finite size, instead of infinite planes.")
+    parser.add_argument("--convex-decomposition", action="store_true",
+                        help="Split collision meshes into convex hulls with "
+                        "CoACD (pip install coacd). Otherwise MuJoCo uses "
+                        "the convex hull of each collision mesh.")
+    parser.add_argument("--coacd-threshold", type=float, default=0.05,
+                        help="CoACD concavity threshold (default: "
+                        "%(default)s). Lower is more precise.")
 
     args = parser.parse_args(argv)
     return sdformat_file_to_mjcf(args.input_file, args.output_file,
@@ -55,7 +62,10 @@ def main(argv=None):
                                  mesh_inertia_shell=args.mesh_inertia_shell,
                                  use_quat=args.use_quat,
                                  max_friction=args.max_friction,
-                                 plane_as_box=args.plane_as_box)
+                                 plane_as_box=args.plane_as_box,
+                                 convex_decomposition=(
+                                     args.convex_decomposition),
+                                 coacd_threshold=args.coacd_threshold)
 
 
 if __name__ == "__main__":

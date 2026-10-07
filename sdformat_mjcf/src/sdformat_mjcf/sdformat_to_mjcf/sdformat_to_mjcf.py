@@ -53,7 +53,8 @@ def _export(mjcf_root, output_dir, file_name):
 
 def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
                           mesh_inertia_shell=False, use_quat=False,
-                          max_friction=1.0, plane_as_box=False):
+                          max_friction=1.0, plane_as_box=False,
+                          convex_decomposition=False, coacd_threshold=0.05):
     """
     Loads an SDFormat input file and converts to MJCF.
     :param str input_file: Path to input SDFormat Model or World file
@@ -69,12 +70,17 @@ def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
     also avoids the global `compiler/@eulerseq` that breaks `<include>`s.
     :param float max_friction: Upper bound of the sliding friction.
     :param bool plane_as_box: Export planes as thin static boxes.
+    :param bool convex_decomposition: Split collision meshes into convex
+    hulls with CoACD (`pip install coacd`).
+    :param float coacd_threshold: CoACD concavity threshold.
     """
     su.options.mesh_inertia_shell = mesh_inertia_shell
     su.options.use_quat = use_quat
     su.options.max_friction = max_friction
     su.options.clamped_friction = set()
     su.options.plane_as_box = plane_as_box
+    su.options.convex_decomposition = convex_decomposition
+    su.options.coacd_threshold = coacd_threshold
     paths = su.collect_model_paths(model_paths)
     su.set_model_paths(paths)
     # The global config is not honored by `Root.load` in the Python bindings.

@@ -244,5 +244,56 @@ class MeshConversionCliTest(unittest.TestCase):
             self.assertEqual(2, len([o for o in objs if len(o) > 15]))
 
 
+try:
+    import coacd  # noqa: F401
+except ImportError:
+    coacd = None
+
+
+@unittest.skipIf(coacd is None, "coacd is not installed")
+class ConvexDecompositionTest(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        os.chdir(TEST_RESOURCES_DIR)
+        # A U-shaped (non-convex) block and a convex box, as STL files.
+        parts = [trimesh.creation.box([1, 0.2, 1]),
+                 trimesh.creation.box([1, 0.2, 1]),
+                 trimesh.creation.box([1, 1, 0.2])]
+        parts[0].apply_translation([0, 0.4, 0.5])
+        parts[1].apply_translation([0, -0.4, 0.5])
+        trimesh.util.concatenate(parts).export(
+            os.path.join(self.tmp.name, "u.stl"))
+        trimesh.creation.box().export(os.path.join(self.tmp.name, "box.stl"))
+
+    def convert(self, mesh, *flags):
+        sdf_file = os.path.join(self.tmp.name, "model.sdf")
+        with open(sdf_file, "w") as f:
+            f.write(f"""<sdf version="1.9"><model name="m"><link name="l">
+              <collision name="c"><geometry><mesh><uri>{mesh}</uri></mesh>
+              </geometry></collision></link></model></sdf>""")
+        output_file = os.path.join(self.tmp.name, "out", "m.xml")
+        self.assertEqual(0, cli.main([sdf_file, output_file, *flags]))
+        return mujoco.Physics.from_xml_path(output_file)
+
+    def test_non_convex_mesh_is_split(self):
+        physics = self.convert("u.stl", "--convex-decomposition",
+                               "--coacd-threshold", "0.1")
+        # The floor is the other geom.
+        self.assertGreater(physics.model.nmesh, 1)
+        self.assertEqual(physics.model.nmesh, physics.model.ngeom - 1)
+        assets = os.listdir(os.path.join(self.tmp.name, "out", "assets"))
+        self.assertIn("model_u_collision_hull00.obj", assets)
+
+    def test_flag_off_keeps_single_geom(self):
+        physics = self.convert("u.stl")
+        self.assertEqual(1, physics.model.nmesh)
+
+    def test_convex_mesh_is_not_split(self):
+        physics = self.convert("box.stl", "--convex-decomposition")
+        self.assertEqual(1, physics.model.nmesh)
+
+
 if __name__ == "__main__":
     unittest.main()
