@@ -28,7 +28,7 @@ import numpy as np
 @dataclass
 class MeshGroup:
     """Geometry sharing one material, ready to be added as an MJCF mesh."""
-    name: str
+    suffix: str
     obj: bytes
     rgba: List[float]
     texture_png: Optional[bytes] = None
@@ -131,14 +131,12 @@ def _convert(path, merge, mtime):
         entry["parts"].append((np.asarray(mesh.vertices) * scale,
                                mesh.faces, uv))
 
-    stem = os.path.splitext(os.path.basename(path))[0]
     result = []
     for i, entry in enumerate(groups.values()):
         textured = entry["image"] is not None and not merge and all(
             part[2] is not None for part in entry["parts"])
-        name = stem if len(groups) == 1 else f"{stem}_{i}"
         result.append(MeshGroup(
-            name=name,
+            suffix="" if len(groups) == 1 else f"_{i}",
             obj=_obj_bytes(entry["parts"], textured),
             rgba=[float(c) for c in entry["rgba"]],
             texture_png=_png_bytes(entry["image"]) if textured else None))

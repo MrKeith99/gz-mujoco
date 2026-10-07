@@ -152,6 +152,60 @@ class MeshConversionCliTest(unittest.TestCase):
             self.assertEqual(1, len([a for a in assets
                                      if a.endswith(".png")]))
 
+    def test_readable_asset_names(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model_dir = os.path.join(temp_dir, "my_model")
+            os.makedirs(os.path.join(model_dir, "meshes"))
+            open(os.path.join(model_dir, "model.config"), "w").close()
+            make_glb(os.path.join(model_dir, "meshes", "two.glb"))
+            geometry = ("<geometry><mesh><uri>meshes/two.glb</uri></mesh>"
+                        "</geometry>")
+            sdf_file = os.path.join(model_dir, "model.sdf")
+            # The same source twice must be written once.
+            with open(sdf_file, "w") as f:
+                f.write(f"""<sdf version="1.9"><model name="m">
+                  <link name="l">
+                    <collision name="c">{geometry}</collision>
+                    <visual name="v1">{geometry}</visual>
+                    <visual name="v2">{geometry}</visual>
+                  </link></model></sdf>""")
+            output_file = os.path.join(temp_dir, "out", "m.xml")
+            self.assertEqual(0, cli.main([sdf_file, output_file]))
+            assets = sorted(os.listdir(os.path.join(temp_dir, "out",
+                                                    "assets")))
+            self.assertEqual(
+                ["my_model_two_0.obj", "my_model_two_1.obj",
+                 "my_model_two_1.png", "my_model_two_collision.obj"],
+                assets)
+            with open(output_file) as f:
+                xml = f.read()
+            self.assertIn('<mesh name="my_model_two_0"', xml)
+            self.assertIn('<texture name="my_model_two_1"', xml)
+            self.assertIn('file="my_model_two_1.png"', xml)
+
+    def test_name_collision_gets_hash(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for sub in ("a", "b"):
+                os.makedirs(os.path.join(temp_dir, sub, "meshes"))
+                make_glb(os.path.join(temp_dir, sub, "meshes", "m.glb"))
+            # Same owner and basename, different source paths.
+            sdf_file = os.path.join(temp_dir, "model.sdf")
+            link = "".join(
+                f"<visual name='{s}'><geometry><mesh><uri>{s}/meshes/m.glb"
+                "</uri></mesh></geometry></visual>" for s in ("a", "b"))
+            with open(sdf_file, "w") as f:
+                f.write(f"""<sdf version="1.9"><model name="m">
+                  <link name="l">{link}</link></model></sdf>""")
+            output_file = os.path.join(temp_dir, "out", "m.xml")
+            self.assertEqual(0, cli.main([sdf_file, output_file]))
+            objs = [a for a in os.listdir(os.path.join(temp_dir, "out",
+                                                       "assets"))
+                    if a.endswith(".obj")]
+            self.assertEqual(4, len(objs))
+            self.assertIn("model_m_0.obj", objs)
+            self.assertIn("model_m_1.obj", objs)
+            self.assertEqual(2, len([o for o in objs if len(o) > 15]))
+
 
 if __name__ == "__main__":
     unittest.main()

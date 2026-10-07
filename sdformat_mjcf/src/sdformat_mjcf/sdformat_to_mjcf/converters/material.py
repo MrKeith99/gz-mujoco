@@ -29,13 +29,16 @@ import sdformat_mjcf.utils.sdf_utils as su
 MATERIAL_NUMBER = 0
 
 
-def _texture_file(path):
+def _texture_file(root, path, owner):
     """MuJoCo only reads PNG textures, so other image formats are converted."""
+    stem = su.asset_stem(owner, path)
+    prefix = su.claim_asset_stem(root, stem, ".png", path)
     if path.lower().endswith(".png"):
-        return path
+        with open(path, "rb") as f:
+            return su.file_asset(f.read(), ".png", prefix)
     buf = io.BytesIO()
     Image.open(path).save(buf, format="PNG")
-    return su.file_asset(buf.getvalue(), ".png")
+    return su.file_asset(buf.getvalue(), ".png", prefix)
 
 
 def add_material(geom, material):
@@ -74,7 +77,8 @@ def add_material(geom, material):
                         name=su.find_unique_name(geom, 'texture',
                                                  f_without_extension),
                         type='2d',
-                        file=_texture_file(path),
+                        file=_texture_file(geom.root, path,
+                                           material.file_path()),
                         gridsize='1 1')
                     cache[key] = asset.add(
                         "material",

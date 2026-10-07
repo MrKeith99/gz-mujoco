@@ -112,11 +112,14 @@ def _add_mesh_geoms(body, name, pose, mesh_shape, visual):
     uri = mesh_shape.uri()
     if not os.path.splitext(os.path.basename(uri))[1]:
         raise RuntimeError("Unable to find the mesh extension {}".format(uri))
-    path = su.resolve_uri(uri, mesh_shape.file_path())
+    owner = mesh_shape.file_path()
+    path = su.resolve_uri(uri, owner)
     scale = su.vec3d_to_list(mesh_shape.scale())
     mesh_args = {"scale": scale}
     if visual and su.options.mesh_inertia_shell:
         mesh_args["inertia"] = "shell"
+    base = su.asset_stem(owner, path)
+    kind = "" if visual else "_collision"
 
     if mesh_io.needs_conversion(path):
         groups = mesh_io.convert_mesh(path, merge=not visual)
@@ -135,30 +138,38 @@ def _add_mesh_geoms(body, name, pose, mesh_shape, visual):
         )
         key = (path, tuple(scale), visual, i)
         if group is None:
-            stem = os.path.splitext(os.path.basename(path))[0]
-            geom.mesh = _get_asset(body, "mesh", key, stem, file=path,
-                                   **mesh_args)
-        else:
+            ext = os.path.splitext(path)[1]
+            with open(path, "rb") as f:
+                contents = f.read()
+            prefix = su.claim_asset_stem(body.root, base, ext.lower(), path)
             geom.mesh = _get_asset(
-                body, "mesh", key, group.name,
-                file=su.file_asset(group.obj, ".obj"), **mesh_args)
+                body, "mesh", key, base + kind,
+                file=su.file_asset(contents, ext, prefix), **mesh_args)
+        else:
+            stem = base + group.suffix + kind
+            prefix = su.claim_asset_stem(body.root, stem, ".obj",
+                                         (path, visual, i))
+            geom.mesh = _get_asset(
+                body, "mesh", key, stem,
+                file=su.file_asset(group.obj, ".obj", prefix), **mesh_args)
             if visual:
-                geom.material = _add_group_material(body, group)
+                geom.material = _add_group_material(body, group, stem)
         geoms.append(geom)
     return geoms
 
 
-def _add_group_material(body, group):
+def _add_group_material(body, group, stem):
     """Add the MJCF material (and texture) of a converted mesh group."""
     texture = None
     if group.texture_png is not None:
         digest = hashlib.sha1(group.texture_png).hexdigest()
+        prefix = su.claim_asset_stem(body.root, stem, ".png", digest)
         texture = _get_asset(
-            body, "texture", digest, group.name, type="2d",
-            file=su.file_asset(group.texture_png, ".png"))
+            body, "texture", digest, stem, type="2d",
+            file=su.file_asset(group.texture_png, ".png", prefix))
     key = (None if texture is None else digest, tuple(group.rgba))
-    return _get_asset(body, "material", key, "material_" + group.name,
-                      texture=texture, rgba=group.rgba)
+    return _get_asset(body, "material", key, stem, texture=texture,
+                      rgba=group.rgba)
 
 
 def apply_surface_to_geometry(geom, sdf_surface):

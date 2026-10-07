@@ -14,9 +14,11 @@
 
 """Utility functions that aid in conversion between SDFormat and MJCF"""
 
+import hashlib
 import logging
 import math
 import os
+import re
 import weakref
 from dm_control import mjcf
 from gz.math import Color, Pose3d, Quaterniond, Vector3d, Matrix3d
@@ -49,14 +51,57 @@ def asset_cache(root):
     return _asset_caches.setdefault(root, {})
 
 
-def file_asset(contents, extension):
+def file_asset(contents, extension, prefix=""):
     """
     :param bytes contents: Contents of the file.
     :param str extension: File extension, including the dot.
+    :param str prefix: Name of the file on disk, without the extension.
     :return: An asset to pass as the `file` of an MJCF element.
     :rtype: mjcf.Asset
     """
-    return mjcf.Asset(contents, extension)
+    return mjcf.Asset(contents, extension, prefix)
+
+
+def asset_stem(owner_file_path, source_path, suffix=""):
+    """
+    Build a readable file name stem for an asset written to the output, such
+    as `rcw26_shelf_shelf` for `model://rcw26_shelf/meshes/shelf.glb`.
+    :param str owner_file_path: Path of the SDFormat file using the asset.
+    :param str source_path: Path of the source file of the asset.
+    :param str suffix: (Optional) Appended to the stem.
+    :return: The stem, restricted to the characters `[A-Za-z0-9_.-]`.
+    :rtype: str
+    """
+    stem = os.path.splitext(os.path.basename(source_path))[0]
+    if owner_file_path:
+        owner_dir = os.path.dirname(os.path.abspath(owner_file_path))
+        if os.path.exists(os.path.join(owner_dir, "model.config")):
+            owner = os.path.basename(owner_dir)
+        else:
+            owner = os.path.splitext(os.path.basename(owner_file_path))[0]
+        stem = f"{owner}_{stem}"
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", stem + suffix)
+
+
+def claim_asset_stem(root, stem, extension, source_id):
+    """
+    Reserve the file name `stem + extension` for the asset `source_id`. The
+    same source always gets the same name; a different source that wants a
+    taken name gets a short hash appended.
+    :param mjcf.RootElement root: The MJCF root.
+    :param str stem: Desired stem.
+    :param str extension: File extension, including the dot.
+    :param source_id: Hashable identifying the source of the asset.
+    :return: The stem to use as the prefix of the file.
+    :rtype: str
+    """
+    names = asset_cache(root).setdefault("file_names", {})
+    owner = names.setdefault(stem + extension, source_id)
+    if owner != source_id:
+        digest = hashlib.sha1(repr(source_id).encode()).hexdigest()[:6]
+        stem = f"{stem}_{digest}"
+        names[stem + extension] = source_id
+    return stem
 
 
 # Directories searched for `model://` URIs, in order.

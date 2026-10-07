@@ -30,7 +30,8 @@ def _export(mjcf_root, output_dir, file_name):
     it. Unlike dm_control's `export_with_assets`, assets are not flat.
     """
     # dm_control rejects meshdir/texturedir, so they are set on the XML.
-    xml = etree.fromstring(mjcf_root.to_xml_string().encode(),
+    xml_string = mjcf_root.to_xml_string(filename_with_hash=False)
+    xml = etree.fromstring(xml_string.encode(),
                            etree.XMLParser(remove_blank_text=True))
     compiler = xml.find("compiler")
     if compiler is None:
@@ -38,7 +39,9 @@ def _export(mjcf_root, output_dir, file_name):
         xml.insert(0, compiler)
     compiler.set("meshdir", ASSETS_DIR)
     compiler.set("texturedir", ASSETS_DIR)
-    assets = mjcf_root.get_assets()
+    assets = {
+        f.value.get_vfs_filename(filename_with_hash=False): f.get_contents()
+        for f in mjcf_root.namescope.files if f.value}
     assets_dir = os.path.join(output_dir, ASSETS_DIR)
     os.makedirs(assets_dir, exist_ok=True)
     for filename, contents in assets.items():
