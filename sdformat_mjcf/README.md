@@ -43,15 +43,40 @@ python -m unittest
 Use the commnad line tool `sdf2mjcf`:
 
 ```bash
-usage: sdf2mjcf [-h] input_file output_file
+usage: sdf2mjcf [-h] [--model-path DIR] [--mesh-inertia-shell] [--use-quat]
+                input_file output_file
 
 positional arguments:
-  input_file   Path to input SDFormat file (World or Model)
-  output_file  Desired path for the output MJCF file
+  input_file            Path to input SDFormat file (World or Model)
+  output_file           Desired path for the output MJCF file
 
 optional arguments:
-  -h, --help   show this help message and exit
+  -h, --help            show this help message and exit
+  --model-path DIR      Directory used to resolve model:// URIs. Can be
+                        repeated. SDF_PATH and GZ_SIM_RESOURCE_PATH are
+                        searched after these.
+  --mesh-inertia-shell  Set inertia="shell" on visual meshes so thin meshes
+                        compile. Requires MuJoCo >= 3.2.5.
+  --use-quat            Write rotations as quaternions instead of euler
+                        angles.
 ```
+
+Meshes and textures are written to an `assets` directory next to the output
+file, which the generated MJCF references through `meshdir` and `texturedir`.
+`model://` URIs in `<include>`, meshes and textures are searched in the
+`--model-path` directories, then in the colon separated `SDF_PATH` and
+`GZ_SIM_RESOURCE_PATH` environment variables. Relative URIs are resolved
+against the SDFormat file that contains them.
+
+By default rotations are written as `euler` angles and the compiler option
+`eulerseq="XYZ"` is set. Since that option is global to the MJCF file, it
+breaks files that are composed with `<include>`; use `--use-quat`
+in that case.
+
+Collada (`.dae`), glTF (`.glb`, `.gltf`) and OBJ files with several materials
+are converted to one OBJ per material, together with their textures (PNG). The
+SDFormat `<scale>` becomes the `scale` of the MJCF mesh. Textures in other
+image formats such as JPEG are converted to PNG.
 
 To run the MJCF file in Mujoco, download a Mujoco release from https://github.com/deepmind/mujoco/releases,
 extract the contents and run
@@ -93,23 +118,19 @@ stated, SDFormat elements that affect the behavior of the simulator (i.e not the
   - `<scene>` element in SDFormat
   - `<physics>` element in SDFormat
   - Models from [Fuel](https://app.gazebosim.org/dashboard)
-  - Models that contain URIs with schemes such as `model://` or `package://`.
+  - Models from `package://` URIs or remote (`http(s)://`) URIs
   - Collision bitmasks
   - The `<self_collide>` tag in models and links
 
 ## Unsupported by MJCF:
 
-  - Collada (`.dae`) meshes are not supported by Mujoco. Therefore, the user
-    has to first convert each `.dae` file to `.obj` or `.stl` file using
-    available tools such as `blender` or `meshlab`. The SDFormat file has to
-    then be updated to point to the converted mesh files instead of the `.dae`
-    files.
-  - Mujoco does not support composite `.obj` files. However, users may process
-    the output `.obj` files with
-    [obj2mjcf](https://github.com/kevinzakka/obj2mjcf) to split them into
-    individual `.obj` files.
-  - Only the diffuse texture from a PBR material is converted to MJCF. Other
-    textures are not supported.
+  - Mesh collisions are replaced by their convex hull, so concave collision
+    meshes such as an open shelf become a solid block.
+  - Only the diffuse (albedo) texture of a PBR material is converted. Other
+    textures (normal, roughness, ...) are not supported.
+  - Textures of primitive shapes are mapped differently than in Gazebo.
+  - Thin or non-watertight meshes may fail to compile, unless
+    `--mesh-inertia-shell` is used with MuJoCo >= 3.2.5.
   - The following link elements
     - `velocity_decay`
     - `projector`
