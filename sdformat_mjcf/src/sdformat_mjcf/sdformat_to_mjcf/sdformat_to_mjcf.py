@@ -68,12 +68,13 @@ def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
     su.options.use_quat = use_quat
     paths = su.collect_model_paths(model_paths)
     su.set_model_paths(paths)
-    parser_config = sdf.ParserConfig.global_config()
+    # The global config is not honored by `Root.load` in the Python bindings.
+    parser_config = sdf.ParserConfig()
     for path in paths:
         parser_config.add_uri_path("model://", path)
     root = sdf.Root()
     try:
-        root.load(input_file)
+        root.load(input_file, parser_config)
     except sdf.SDFErrorsException as e:
         print(e, file=sys.stderr)
         return 1

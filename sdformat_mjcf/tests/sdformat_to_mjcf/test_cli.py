@@ -105,6 +105,16 @@ class CLITest(unittest.TestCase):
             with open(output_file) as f:
                 self.assertIn('meshdir="assets"', f.read())
 
+    def test_include_from_model_path(self):
+        world_file = TEST_RESOURCES_DIR / "world_include.sdf"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = path.join(temp_dir, "world.xml")
+            args = [str(world_file), output_file,
+                    "--model-path", str(TEST_RESOURCES_DIR)]
+            self.assertEqual(0, cli.main(args))
+            physics = mujoco.Physics.from_xml_path(output_file)
+            self.assertGreater(physics.model.nbody, 1)
+
     def test_model_uri_without_model_path(self):
         model_file = TEST_RESOURCES_DIR / "model_uri.sdf"
         with tempfile.TemporaryDirectory() as temp_dir:
