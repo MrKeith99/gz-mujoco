@@ -24,6 +24,7 @@ from dm_control import mjcf
 
 from tests import helpers
 from tests.helpers import get_resources_dir
+import sdformat_mjcf.utils.sdf_utils as su
 from sdformat_mjcf.sdformat_to_mjcf.converters import geometry as geometry_conv
 from sdformat_mjcf.sdformat_to_mjcf.converters.root import add_root
 
@@ -184,8 +185,8 @@ class GeometryTest(helpers.TestCase):
 
 class SurfaceTest(helpers.TestCase):
 
-    test_friction = 1.23
-    expected_friction = [1.23, 0.005, 0.0001]
+    test_friction = 0.73
+    expected_friction = [0.73, 0.005, 0.0001]
     box_size = [1, 1, 1]
 
     def test_valid_surface(self):
@@ -198,6 +199,26 @@ class SurfaceTest(helpers.TestCase):
                         size=self.box_size)
         geometry_conv.apply_surface_to_geometry(geom, surface)
         assert_allclose(self.expected_friction, geom.friction)
+
+    def test_friction_is_clamped(self):
+        surface = sdf.Surface()
+        surface.friction().ode().set_mu(100)
+        mujoco = mjcf.RootElement(model="test")
+        body = mujoco.worldbody.add('body')
+        geoms = [body.add('geom', type="box", size=self.box_size)
+                 for _ in range(2)]
+        su.options.clamped_friction = set()
+        self.addCleanup(setattr, su.options, "max_friction", 1.0)
+        with self.assertLogs(level="WARNING") as logs:
+            geometry_conv.apply_surface_to_geometry(geoms[0], surface)
+            geometry_conv.apply_surface_to_geometry(geoms[1], surface)
+        # Only one warning per clamped value.
+        self.assertEqual(1, len(logs.records))
+        assert_allclose([1.0, 0.005, 0.0001], geoms[0].friction)
+
+        su.options.max_friction = 2.5
+        geometry_conv.apply_surface_to_geometry(geoms[0], surface)
+        assert_allclose([2.5, 0.005, 0.0001], geoms[0].friction)
 
 
 class CollisionTest(helpers.TestCase):
@@ -213,7 +234,7 @@ class CollisionTest(helpers.TestCase):
         collision.set_geometry(geometry)
 
         surface = sdf.Surface()
-        surface.friction().ode().set_mu(1.23)
+        surface.friction().ode().set_mu(0.73)
         collision.set_surface(surface)
 
         mujoco = mjcf.RootElement(model="test")
@@ -225,7 +246,7 @@ class CollisionTest(helpers.TestCase):
         self.assertEqual(geometry_conv.COLLISION_GEOM_GROUP, mj_geom.group)
         self.assertIsNone(mj_geom.contype)
         self.assertIsNone(mj_geom.conaffinity)
-        assert_allclose([1.23, 0.005, 0.0001], mj_geom.friction)
+        assert_allclose([0.73, 0.005, 0.0001], mj_geom.friction)
 
 
 class VisualTest(helpers.TestCase):

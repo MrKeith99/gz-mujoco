@@ -41,12 +41,17 @@ def main(argv=None):
     parser.add_argument("--use-quat", action="store_true",
                         help="Write rotations as quaternions instead of "
                         "euler angles.")
+    parser.add_argument("--max-friction", type=float, default=1.0,
+                        help="Upper bound of the sliding friction (default: "
+                        "%(default)s). Larger //surface/friction/ode/mu "
+                        "values are clamped with a warning.")
 
     args = parser.parse_args(argv)
     return sdformat_file_to_mjcf(args.input_file, args.output_file,
                                  model_paths=args.model_path,
                                  mesh_inertia_shell=args.mesh_inertia_shell,
-                                 use_quat=args.use_quat)
+                                 use_quat=args.use_quat,
+                                 max_friction=args.max_friction)
 
 
 if __name__ == "__main__":

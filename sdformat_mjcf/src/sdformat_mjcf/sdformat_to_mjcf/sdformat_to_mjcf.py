@@ -52,7 +52,8 @@ def _export(mjcf_root, output_dir, file_name):
 
 
 def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
-                          mesh_inertia_shell=False, use_quat=False):
+                          mesh_inertia_shell=False, use_quat=False,
+                          max_friction=1.0):
     """
     Loads an SDFormat input file and converts to MJCF.
     :param str input_file: Path to input SDFormat Model or World file
@@ -66,9 +67,12 @@ def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
     thin meshes compile. Requires MuJoCo >= 3.2.5.
     :param bool use_quat: Write rotations as `quat` instead of `euler`, which
     also avoids the global `compiler/@eulerseq` that breaks `<include>`s.
+    :param float max_friction: Upper bound of the sliding friction.
     """
     su.options.mesh_inertia_shell = mesh_inertia_shell
     su.options.use_quat = use_quat
+    su.options.max_friction = max_friction
+    su.options.clamped_friction = set()
     paths = su.collect_model_paths(model_paths)
     su.set_model_paths(paths)
     # The global config is not honored by `Root.load` in the Python bindings.

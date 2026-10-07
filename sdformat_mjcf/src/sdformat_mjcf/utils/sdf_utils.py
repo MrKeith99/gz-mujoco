@@ -37,6 +37,11 @@ class ConversionOptions:
     # Compute the inertia of visual meshes from their surface, which
     # needs MuJoCo >= 3.2.5.
     mesh_inertia_shell = False
+    # Upper bound of the sliding friction. Gazebo accepts huge `<mu>` values
+    # (e.g. 100) that make free bodies sink through planes in MuJoCo.
+    max_friction = 1.0
+    # Friction values already warned about.
+    clamped_friction = set()
 
 
 options = ConversionOptions()

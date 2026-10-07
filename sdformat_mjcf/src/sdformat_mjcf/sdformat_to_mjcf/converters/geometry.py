@@ -15,6 +15,7 @@
 """Module to convert SDFormat Collision/Visual geometries to MJCF geoms"""
 
 import hashlib
+import logging
 import os
 
 import sdformat_mjcf.utils.sdf_utils as su
@@ -183,7 +184,14 @@ def apply_surface_to_geometry(geom, sdf_surface):
 
     sdf_friction_ode = sdf_surface.friction().ode()
     # Use //surface/friction/ode/mu for sliding friction
-    geom.friction = [sdf_friction_ode.mu(), 0.005, 0.0001]
+    mu = sdf_friction_ode.mu()
+    if mu > su.options.max_friction:
+        if mu not in su.options.clamped_friction:
+            su.options.clamped_friction.add(mu)
+            logging.warning("Clamping friction mu=%s to %s (--max-friction)",
+                            mu, su.options.max_friction)
+        mu = su.options.max_friction
+    geom.friction = [mu, 0.005, 0.0001]
 
 
 def add_collision(body, col):
