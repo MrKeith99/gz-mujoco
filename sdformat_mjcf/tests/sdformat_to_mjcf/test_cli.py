@@ -20,6 +20,7 @@ import os
 from os import path
 from unittest import mock
 import numpy as np
+from PIL import Image
 from numpy.testing import assert_allclose
 from dm_control import mujoco
 
@@ -114,6 +115,25 @@ class CLITest(unittest.TestCase):
             self.assertEqual(0, cli.main(args))
             physics = mujoco.Physics.from_xml_path(output_file)
             self.assertGreater(physics.model.nbody, 1)
+
+    def test_jpg_texture_converted_to_png(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            Image.new("RGB", (8, 8), (200, 10, 10)).save(
+                path.join(temp_dir, "tex.jpg"))
+            sdf_file = path.join(temp_dir, "model.sdf")
+            with open(sdf_file, "w") as f:
+                f.write("""<sdf version="1.9"><model name="m"><link name="l">
+                  <visual name="v"><geometry><box><size>1 1 1</size></box>
+                  </geometry><material><pbr><metal>
+                  <albedo_map>tex.jpg</albedo_map></metal></pbr></material>
+                  </visual></link></model></sdf>""")
+            output_file = path.join(temp_dir, "out", "m.xml")
+            self.assertEqual(0, cli.main([sdf_file, output_file]))
+            assets = os.listdir(path.join(temp_dir, "out", "assets"))
+            self.assertEqual(1, len(assets))
+            self.assertTrue(assets[0].endswith(".png"))
+            physics = mujoco.Physics.from_xml_path(output_file)
+            self.assertEqual(2, physics.model.ntex)  # grid + tex
 
     def test_model_uri_without_model_path(self):
         model_file = TEST_RESOURCES_DIR / "model_uri.sdf"

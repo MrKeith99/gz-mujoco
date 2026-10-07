@@ -19,11 +19,23 @@ from gz.math import clamp
 from sdformat import Pbr, PbrWorkflow, Material  # noqa: F401
 import sdformat as sdf
 
+import io
 import os
+
+from PIL import Image
 
 import sdformat_mjcf.utils.sdf_utils as su
 
 MATERIAL_NUMBER = 0
+
+
+def _texture_file(path):
+    """MuJoCo only reads PNG textures, so other image formats are converted."""
+    if path.lower().endswith(".png"):
+        return path
+    buf = io.BytesIO()
+    Image.open(path).save(buf, format="PNG")
+    return su.file_asset(buf.getvalue(), ".png")
 
 
 def add_material(geom, material):
@@ -62,7 +74,7 @@ def add_material(geom, material):
                         name=su.find_unique_name(geom, 'texture',
                                                  f_without_extension),
                         type='2d',
-                        file=path,
+                        file=_texture_file(path),
                         gridsize='1 1')
                     cache[key] = asset.add(
                         "material",
