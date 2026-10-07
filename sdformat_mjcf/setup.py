@@ -44,5 +44,9 @@ setup(
     },
     install_requires=[
         'dm-control',
+        'numpy',
+        'pillow',
+        'pycollada',
+        'trimesh',
     ],
 )

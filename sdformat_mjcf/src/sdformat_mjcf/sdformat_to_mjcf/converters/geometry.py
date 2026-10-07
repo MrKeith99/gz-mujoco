@@ -14,17 +14,22 @@
 
 """Module to convert SDFormat Collision/Visual geometries to MJCF geoms"""
 
+import hashlib
 import os
 
 import sdformat_mjcf.utils.sdf_utils as su
+from sdformat_mjcf.sdformat_to_mjcf import mesh_io
 
 COLLISION_GEOM_GROUP = 3
 VISUAL_GEOM_GROUP = 0
 
 
-def add_geometry(body, name, pose, sdf_geom):
+def add_geometry(body, name, pose, sdf_geom, visual=False):
     """
     Converts an SDFormat geometry to an MJCF geom and add it to the given body.
+
+    A mesh with several materials (e.g. a glTF file) is split into one geom
+    per material when `visual` is true. The first geom is returned.
 
     :param mjcf.Element body: The MJCF body to which the geom is added.
     :param str name: Name of the geom (obtained from the name of the SDFormat
@@ -32,12 +37,27 @@ def add_geometry(body, name, pose, sdf_geom):
     :param sdformat.Pose3d pose: Resolved pose of the geom (obtained from the
             pose of the SDFormat Collision or Visual).
     :param sdformat.Geometry sdf_geom: Geometry object to be converted.
+    :param bool visual: Whether the geometry belongs to a visual.
     :return: The newly created MJCF geom.
     :rtype: mjcf.Element
     """
+    geoms = add_geometries(body, name, pose, sdf_geom, visual)
+    return geoms[0] if geoms else None
+
+
+def add_geometries(body, name, pose, sdf_geom, visual=False):
+    """
+    Same as `add_geometry`, but returns all the geoms that were created.
+
+    :return: The newly created MJCF geoms.
+    :rtype: list[mjcf.Element]
+    """
 
     if sdf_geom is None:
-        return
+        return []
+    if sdf_geom.mesh_shape():
+        return _add_mesh_geoms(body, name, pose, sdf_geom.mesh_shape(),
+                               visual)
     geom = body.add(
         "geom",
         name=su.find_unique_name(body, "geom", name),
@@ -72,31 +92,73 @@ def add_geometry(body, name, pose, sdf_geom):
         sphere_shape = sdf_geom.sphere_shape()
         geom.type = "sphere"
         geom.size = [sphere_shape.radius()]
-    elif sdf_geom.mesh_shape():
-        mesh_shape = sdf_geom.mesh_shape()
-        uri = mesh_shape.uri()
-        extension_tokens = os.path.basename(mesh_shape.uri()).split(".")
-        if (len(extension_tokens) == 1):
-            raise RuntimeError("Unable to find the mesh extension {}"
-                               .format(uri))
-        file_without_extension = os.path.splitext(
-            os.path.basename(mesh_shape.uri()))[0]
-        if 'http://' in uri or 'https://' in uri:
-            raise RuntimeError("Fuel meshes are not yet supported")
-        geom.type = "mesh"
-        asset_loaded = geom.root.asset.find('mesh', file_without_extension)
-        mesh_file_path = su.resolve_uri(uri, mesh_shape.file_path())
-        if asset_loaded is None:
-            geom.mesh = geom.root.asset.add('mesh',
-                                            file=mesh_file_path)
-        else:
-            geom.mesh = asset_loaded
-        geom.mesh.scale = su.vec3d_to_list(mesh_shape.scale())
     else:
         raise RuntimeError(
             f"Encountered unsupported shape type {sdf_geom.type()}")
 
-    return geom
+    return [geom]
+
+
+def _get_asset(body, kind, key, name, **kwargs):
+    """Add an asset of type `kind` unless one with the same `key` exists."""
+    cache = su.asset_cache(body.root)
+    if (kind, key) not in cache:
+        cache[(kind, key)] = body.root.asset.add(
+            kind, name=su.find_unique_name(body, kind, name), **kwargs)
+    return cache[(kind, key)]
+
+
+def _add_mesh_geoms(body, name, pose, mesh_shape, visual):
+    uri = mesh_shape.uri()
+    if not os.path.splitext(os.path.basename(uri))[1]:
+        raise RuntimeError("Unable to find the mesh extension {}".format(uri))
+    path = su.resolve_uri(uri, mesh_shape.file_path())
+    scale = su.vec3d_to_list(mesh_shape.scale())
+    mesh_args = {"scale": scale}
+    if visual and su.options.mesh_inertia_shell:
+        mesh_args["inertia"] = "shell"
+
+    if mesh_io.needs_conversion(path):
+        groups = mesh_io.convert_mesh(path, merge=not visual)
+    else:
+        groups = [None]
+
+    geoms = []
+    for i, group in enumerate(groups):
+        geom_name = name if i == 0 else f"{name}{su.NAME_DELIMITER}{i}"
+        geom = body.add(
+            "geom",
+            name=su.find_unique_name(body, "geom", geom_name),
+            type="mesh",
+            pos=su.vec3d_to_list(pose.pos()),
+            euler=su.quat_to_euler_list(pose.rot()),
+        )
+        key = (path, tuple(scale), visual, i)
+        if group is None:
+            stem = os.path.splitext(os.path.basename(path))[0]
+            geom.mesh = _get_asset(body, "mesh", key, stem, file=path,
+                                   **mesh_args)
+        else:
+            geom.mesh = _get_asset(
+                body, "mesh", key, group.name,
+                file=su.file_asset(group.obj, ".obj"), **mesh_args)
+            if visual:
+                geom.material = _add_group_material(body, group)
+        geoms.append(geom)
+    return geoms
+
+
+def _add_group_material(body, group):
+    """Add the MJCF material (and texture) of a converted mesh group."""
+    texture = None
+    if group.texture_png is not None:
+        digest = hashlib.sha1(group.texture_png).hexdigest()
+        texture = _get_asset(
+            body, "texture", digest, group.name, type="2d",
+            file=su.file_asset(group.texture_png, ".png"))
+    key = (None if texture is None else digest, tuple(group.rgba))
+    return _get_asset(body, "material", key, "material_" + group.name,
+                      texture=texture, rgba=group.rgba)
 
 
 def apply_surface_to_geometry(geom, sdf_surface):
@@ -143,12 +205,25 @@ def add_visual(body, vis):
     :return: The newly created MJCF geom.
     :rtype: mjcf.Element
     """
+    return add_visual_geoms(body, vis)[0]
+
+
+def add_visual_geoms(body, vis):
+    """
+    Same as `add_visual`, but returns all the geoms that were created. A mesh
+    with several materials results in one geom per material.
+
+    :return: The newly created MJCF geoms.
+    :rtype: list[mjcf.Element]
+    """
     sem_pose = vis.semantic_pose()
     pose = su.graph_resolver.resolve_pose(sem_pose)
-    geom = add_geometry(body, vis.name(), pose, vis.geometry())
-    geom.group = VISUAL_GEOM_GROUP
-    # Visual geoms do not collide with any other geom, so we set their contype
-    # and conaffinity to 0.
-    geom.contype = 0
-    geom.conaffinity = 0
-    return geom
+    geoms = add_geometries(body, vis.name(), pose, vis.geometry(),
+                           visual=True)
+    for geom in geoms:
+        geom.group = VISUAL_GEOM_GROUP
+        # Visual geoms do not collide with any other geom, so we set their
+        # contype and conaffinity to 0.
+        geom.contype = 0
+        geom.conaffinity = 0
+    return geoms

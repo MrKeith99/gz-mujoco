@@ -35,10 +35,14 @@ def main(argv=None):
                         help="Directory used to resolve model:// URIs. Can be "
                         "repeated. SDF_PATH and GZ_SIM_RESOURCE_PATH are "
                         "searched after these.")
+    parser.add_argument("--mesh-inertia-shell", action="store_true",
+                        help="Set inertia=\"shell\" on visual meshes so thin "
+                        "meshes compile. Requires MuJoCo >= 3.2.5.")
 
     args = parser.parse_args(argv)
     return sdformat_file_to_mjcf(args.input_file, args.output_file,
-                                 model_paths=args.model_path)
+                                 model_paths=args.model_path,
+                                 mesh_inertia_shell=args.mesh_inertia_shell)
 
 
 if __name__ == "__main__":

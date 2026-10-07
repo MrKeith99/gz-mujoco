@@ -17,9 +17,47 @@
 import logging
 import math
 import os
+import weakref
+from dm_control import mjcf
 from gz.math import Color, Pose3d, Quaterniond, Vector3d, Matrix3d
 
 NAME_DELIMITER = '_'
+
+# Cache of assets already added to each MJCF root, keyed by their source.
+_asset_caches = weakref.WeakKeyDictionary()
+
+
+class ConversionOptions:
+    """Settings shared by all converters, set by `sdformat_file_to_mjcf`."""
+
+    # Write `quat` instead of `euler` for every pose.
+    use_quat = False
+    # Compute the inertia of visual meshes from their surface, which
+    # needs MuJoCo >= 3.2.5.
+    mesh_inertia_shell = False
+
+
+options = ConversionOptions()
+
+
+def asset_cache(root):
+    """
+    :param mjcf.RootElement root: The MJCF root.
+    :return: A dict the converters use to reuse assets within `root`.
+    :rtype: dict
+    """
+    return _asset_caches.setdefault(root, {})
+
+
+def file_asset(contents, extension):
+    """
+    :param bytes contents: Contents of the file.
+    :param str extension: File extension, including the dot.
+    :return: An asset to pass as the `file` of an MJCF element.
+    :rtype: mjcf.Asset
+    """
+    return mjcf.Asset(contents, extension)
+
 
 # Directories searched for `model://` URIs, in order.
 _model_paths = []

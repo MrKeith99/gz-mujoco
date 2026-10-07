@@ -52,26 +52,29 @@ def add_material(geom, material):
                     raise RuntimeError("Unable to find the extension {}"
                                        .format(workflow.albedo_map()))
 
-                texture_loaded = asset.find('texture',
-                                            f_without_extension)
-                if texture_loaded is None:
-                    texture = asset.add('texture',
-                                        name=f_without_extension,
-                                        type='2d',
-                                        file=su.resolve_uri(
-                                            workflow.albedo_map(),
-                                            material.file_path()),
-                                        gridsize='1 1')
-                    r_mat = asset.add("material",
-                                      name="material_" + f_without_extension,
-                                      texture=texture,
-                                      texrepeat="1 1",
-                                      texuniform=True,
-                                      specular=specular,
-                                      emission=emissive)
-                else:
-                    r_mat = asset.find('material',
-                                       'material_' + f_without_extension)
+                path = su.resolve_uri(workflow.albedo_map(),
+                                      material.file_path())
+                key = ("albedo", path, specular, emissive)
+                cache = su.asset_cache(geom.root)
+                if key not in cache:
+                    texture = asset.add(
+                        'texture',
+                        name=su.find_unique_name(geom, 'texture',
+                                                 f_without_extension),
+                        type='2d',
+                        file=path,
+                        gridsize='1 1')
+                    cache[key] = asset.add(
+                        "material",
+                        name=su.find_unique_name(
+                            geom, 'material',
+                            "material_" + f_without_extension),
+                        texture=texture,
+                        texrepeat="1 1",
+                        texuniform=True,
+                        specular=specular,
+                        emission=emissive)
+                r_mat = cache[key]
     else:
         global MATERIAL_NUMBER
         diff = material.diffuse()

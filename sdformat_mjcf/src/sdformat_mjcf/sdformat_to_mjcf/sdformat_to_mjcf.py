@@ -48,7 +48,8 @@ def _export(mjcf_root, output_dir, file_name):
         f.write(etree.tostring(xml, pretty_print=True))
 
 
-def sdformat_file_to_mjcf(input_file, output_file, model_paths=None):
+def sdformat_file_to_mjcf(input_file, output_file, model_paths=None,
+                          mesh_inertia_shell=False):
     """
     Loads an SDFormat input file and converts to MJCF.
     :param str input_file: Path to input SDFormat Model or World file
@@ -58,7 +59,10 @@ def sdformat_file_to_mjcf(input_file, output_file, model_paths=None):
     :param list[str] model_paths: (Optional) Directories used to resolve
     `model://` URIs. They take priority over the colon separated environment
     variables `SDF_PATH` and `GZ_SIM_RESOURCE_PATH`.
+    :param bool mesh_inertia_shell: Set `inertia="shell"` on visual meshes so
+    thin meshes compile. Requires MuJoCo >= 3.2.5.
     """
+    su.options.mesh_inertia_shell = mesh_inertia_shell
     paths = su.collect_model_paths(model_paths)
     su.set_model_paths(paths)
     parser_config = sdf.ParserConfig.global_config()

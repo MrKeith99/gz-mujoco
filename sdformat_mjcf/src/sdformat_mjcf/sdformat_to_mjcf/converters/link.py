@@ -14,7 +14,7 @@
 
 from sdformat_mjcf.sdformat_to_mjcf.converters.geometry import (
     add_collision,
-    add_visual,
+    add_visual_geoms,
 )
 from sdformat_mjcf.sdformat_to_mjcf.converters.light import add_light
 from sdformat_mjcf.sdformat_to_mjcf.converters.material import add_material
@@ -93,9 +93,10 @@ def add_link(body, link, parent_name="world", link_pose=None, link_name=None):
     for vi in range(link.visual_count()):
         vis = link.visual_by_index(vi)
         if vis.geometry() is not None:
-            visual_geom = add_visual(body, vis)
-            if vis.material() is not None:
-                add_material(visual_geom, vis.material())
+            for visual_geom in add_visual_geoms(body, vis):
+                # Materials embedded in a mesh take precedence.
+                if vis.material() is not None and visual_geom.material is None:
+                    add_material(visual_geom, vis.material())
 
     for li in range(link.light_count()):
         light = link.light_by_index(li)
