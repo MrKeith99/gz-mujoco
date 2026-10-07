@@ -12,9 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
+
 from gz.math import Pose3d
 import sdformat as sdf
 import sdformat_mjcf.utils.sdf_utils as su
+
+
+def _has_plane(link):
+    """Whether any collision or visual of `link` is a plane."""
+    geometries = [link.collision_by_index(i).geometry()
+                  for i in range(link.collision_count())]
+    geometries += [link.visual_by_index(i).geometry()
+                   for i in range(link.visual_count())]
+    return any(g is not None and g.plane_shape() for g in geometries)
 
 
 class StaticFixedJoint(sdf.Joint):
@@ -138,7 +149,14 @@ class KinematicHierarchy:
                 node.link.semantic_pose()
             )
             self.link_to_node_dict[node.link] = node
-            joint = StaticFixedJoint() if model.static() else FreeJoint()
+            static = model.static()
+            if not static and _has_plane(node.link):
+                logging.warning(
+                    "Link %s of non-static model %s has a plane geometry, "
+                    "which MuJoCo only allows in static bodies. Treating the "
+                    "link as static.", node.link.name(), model.name())
+                static = True
+            joint = StaticFixedJoint() if static else FreeJoint()
             self.world_node.add_child(node, joint)
 
         for ji in range(model.joint_count()):

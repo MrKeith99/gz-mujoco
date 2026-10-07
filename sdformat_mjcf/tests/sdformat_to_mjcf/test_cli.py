@@ -135,6 +135,21 @@ class CLITest(unittest.TestCase):
             physics = mujoco.Physics.from_xml_path(output_file)
             self.assertEqual(2, physics.model.ntex)  # grid + tex
 
+    def test_plane_in_non_static_model_is_static(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sdf_file = path.join(temp_dir, "model.sdf")
+            with open(sdf_file, "w") as f:
+                f.write("""<sdf version="1.9"><model name="floor">
+                  <link name="l"><collision name="c"><geometry><plane>
+                  <normal>0 0 1</normal><size>4 4</size></plane></geometry>
+                  </collision></link></model></sdf>""")
+            output_file = path.join(temp_dir, "floor.xml")
+            with self.assertLogs(level="WARNING") as logs:
+                self.assertEqual(0, cli.main([sdf_file, output_file]))
+            self.assertIn("plane", logs.output[0])
+            physics = mujoco.Physics.from_xml_path(output_file)
+            self.assertEqual(0, physics.model.njnt)
+
     def test_model_uri_without_model_path(self):
         model_file = TEST_RESOURCES_DIR / "model_uri.sdf"
         with tempfile.TemporaryDirectory() as temp_dir:
