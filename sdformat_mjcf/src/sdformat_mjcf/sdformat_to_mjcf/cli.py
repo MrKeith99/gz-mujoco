@@ -30,9 +30,15 @@ def main(argv=None):
                         help="Path to input SDFormat file (World or Model)")
     parser.add_argument("output_file",
                         help="Desired path for the output MJCF file")
+    parser.add_argument("--model-path", action="append", default=[],
+                        metavar="DIR",
+                        help="Directory used to resolve model:// URIs. Can be "
+                        "repeated. SDF_PATH and GZ_SIM_RESOURCE_PATH are "
+                        "searched after these.")
 
     args = parser.parse_args(argv)
-    return sdformat_file_to_mjcf(args.input_file, args.output_file)
+    return sdformat_file_to_mjcf(args.input_file, args.output_file,
+                                 model_paths=args.model_path)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,8 @@ import sdformat as sdf
 
 import os
 
+import sdformat_mjcf.utils.sdf_utils as su
+
 MATERIAL_NUMBER = 0
 
 
@@ -56,7 +58,9 @@ def add_material(geom, material):
                     texture = asset.add('texture',
                                         name=f_without_extension,
                                         type='2d',
-                                        file=workflow.albedo_map(),
+                                        file=su.resolve_uri(
+                                            workflow.albedo_map(),
+                                            material.file_path()),
                                         gridsize='1 1')
                     r_mat = asset.add("material",
                                       name="material_" + f_without_extension,

@@ -1,0 +1,28 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <model name="uri_box">
+    <link name="link">
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://box_obj/meshes/box.obj</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://box_obj/meshes/box.obj</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <pbr>
+            <metal>
+              <albedo_map>model://box_obj/textures/albedo_map.png</albedo_map>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

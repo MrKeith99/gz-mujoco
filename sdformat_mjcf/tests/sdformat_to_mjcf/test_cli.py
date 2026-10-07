@@ -18,6 +18,7 @@ import io
 import tempfile
 import os
 from os import path
+from unittest import mock
 import numpy as np
 from dm_control import mujoco
 
@@ -87,6 +88,36 @@ class CLITest(unittest.TestCase):
             return_code = cli.main([str(model_file), output_file])
             self.assertEqual(0, return_code)
             self.assertTrue(os.path.exists(output_file))
+
+    def test_model_path_and_assets_dir(self):
+        model_file = TEST_RESOURCES_DIR / "model_uri.sdf"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = path.join(temp_dir, "uri_box.xml")
+            args = [str(model_file), output_file,
+                    "--model-path", str(TEST_RESOURCES_DIR)]
+            self.assertEqual(0, cli.main(args))
+            assets = os.listdir(path.join(temp_dir, "assets"))
+            self.assertTrue(any(f.endswith(".obj") for f in assets))
+            self.assertTrue(any(f.endswith(".png") for f in assets))
+            with open(output_file) as f:
+                self.assertIn('meshdir="assets"', f.read())
+
+    def test_model_uri_without_model_path(self):
+        model_file = TEST_RESOURCES_DIR / "model_uri.sdf"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = path.join(temp_dir, "uri_box.xml")
+            with mock.patch.dict(os.environ, {"SDF_PATH": "",
+                                              "GZ_SIM_RESOURCE_PATH": ""}):
+                with self.assertRaisesRegex(RuntimeError, "model://"):
+                    cli.main([str(model_file), output_file])
+
+    def test_model_path_from_env(self):
+        model_file = TEST_RESOURCES_DIR / "model_uri.sdf"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_file = path.join(temp_dir, "uri_box.xml")
+            env = {"GZ_SIM_RESOURCE_PATH": str(TEST_RESOURCES_DIR)}
+            with mock.patch.dict(os.environ, env):
+                self.assertEqual(0, cli.main([str(model_file), output_file]))
 
 
 if __name__ == "__main__":

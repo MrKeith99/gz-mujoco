@@ -15,18 +15,55 @@
 import os
 import sys
 
+from lxml import etree
 import sdformat as sdf
-from dm_control.mjcf.export_with_assets import export_with_assets
+from dm_control.mujoco.wrapper import util
+import sdformat_mjcf.utils.sdf_utils as su
 from sdformat_mjcf.sdformat_to_mjcf.converters.root import add_root
 
+ASSETS_DIR = "assets"
 
-def sdformat_file_to_mjcf(input_file, output_file):
+
+def _export(mjcf_root, output_dir, file_name):
+    """
+    Write the MJCF XML to `output_dir` and its assets to `ASSETS_DIR` inside
+    it. Unlike dm_control's `export_with_assets`, assets are not flat.
+    """
+    # dm_control rejects meshdir/texturedir, so they are set on the XML.
+    xml = etree.fromstring(mjcf_root.to_xml_string().encode(),
+                           etree.XMLParser(remove_blank_text=True))
+    compiler = xml.find("compiler")
+    if compiler is None:
+        compiler = etree.Element("compiler")
+        xml.insert(0, compiler)
+    compiler.set("meshdir", ASSETS_DIR)
+    compiler.set("texturedir", ASSETS_DIR)
+    assets = mjcf_root.get_assets()
+    assets_dir = os.path.join(output_dir, ASSETS_DIR)
+    os.makedirs(assets_dir, exist_ok=True)
+    for filename, contents in assets.items():
+        with open(os.path.join(assets_dir, filename), "wb") as f:
+            f.write(util.to_binary_string(contents))
+    with open(os.path.join(output_dir, file_name), "wb") as f:
+        f.write(etree.tostring(xml, pretty_print=True))
+
+
+def sdformat_file_to_mjcf(input_file, output_file, model_paths=None):
     """
     Loads an SDFormat input file and converts to MJCF.
     :param str input_file: Path to input SDFormat Model or World file
     :param str output_file: Path to output MJCF file. Any generated artifacts,
-    such as meshes will be output to the directory containing the output file.
+    such as meshes and textures, will be output to the `assets` directory next
+    to the output file.
+    :param list[str] model_paths: (Optional) Directories used to resolve
+    `model://` URIs. They take priority over the colon separated environment
+    variables `SDF_PATH` and `GZ_SIM_RESOURCE_PATH`.
     """
+    paths = su.collect_model_paths(model_paths)
+    su.set_model_paths(paths)
+    parser_config = sdf.ParserConfig.global_config()
+    for path in paths:
+        parser_config.add_uri_path("model://", path)
     root = sdf.Root()
     try:
         root.load(input_file)
@@ -45,7 +82,7 @@ def sdformat_file_to_mjcf(input_file, output_file):
             os.chdir(input_dir)
             mjcf_root = add_root(root)
             mjcf_root.default.dclass = "unused"
-            export_with_assets(mjcf_root, output_dir, file_name)
+            _export(mjcf_root, output_dir, file_name)
         finally:
             # Switch CWD back to previous CWD so that caller can expect to
             # find outputs at expected relative paths.

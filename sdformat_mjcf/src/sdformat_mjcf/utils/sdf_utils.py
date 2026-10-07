@@ -16,9 +16,13 @@
 
 import logging
 import math
+import os
 from gz.math import Color, Pose3d, Quaterniond, Vector3d, Matrix3d
 
 NAME_DELIMITER = '_'
+
+# Directories searched for `model://` URIs, in order.
+_model_paths = []
 
 
 def vec3d_to_list(vec):
@@ -217,6 +221,74 @@ def find_unique_name(elem, namespace, name):
         test_name = f"{name}{NAME_DELIMITER}{index}"
         index += 1
     return test_name
+
+
+def set_model_paths(paths):
+    """
+    Set the directories used to resolve `model://` URIs.
+    :param list[str] paths: Directories searched in order. Each one contains
+    model directories, e.g. `<path>/<model_name>/meshes/foo.dae`.
+    """
+    _model_paths[:] = [os.path.abspath(p) for p in paths]
+
+
+def get_model_paths():
+    """
+    :return: Copy of the directories used to resolve `model://` URIs.
+    :rtype: list[str]
+    """
+    return list(_model_paths)
+
+
+def collect_model_paths(extra_paths=None):
+    """
+    Gather model directories from `extra_paths` followed by the colon
+    separated environment variables `SDF_PATH` and `GZ_SIM_RESOURCE_PATH`.
+    :param list[str] extra_paths: (Optional) Directories with top priority.
+    :return: The ordered list of directories without duplicates.
+    :rtype: list[str]
+    """
+    paths = list(extra_paths or [])
+    for var in ("SDF_PATH", "GZ_SIM_RESOURCE_PATH"):
+        paths += [p for p in os.environ.get(var, "").split(os.pathsep) if p]
+    unique = []
+    for p in paths:
+        if p not in unique:
+            unique.append(p)
+    return unique
+
+
+def resolve_uri(uri, owner_file_path=""):
+    """
+    Resolve a resource URI found in an SDFormat file to a file path.
+
+    Supports `model://<model>/<rest>` (searched in the registered model
+    directories), `file://`, absolute paths and paths relative to the file
+    that contains the URI. A relative path is returned unchanged if the owner
+    file is unknown.
+    :param str uri: The URI to resolve.
+    :param str owner_file_path: Path of the SDFormat file containing `uri`.
+    :return: The resolved path.
+    :rtype: str
+    :raises RuntimeError: If the URI cannot be resolved.
+    """
+    if uri.startswith(("http://", "https://")):
+        raise RuntimeError(f"Fuel/remote URIs are not supported: {uri}")
+    if uri.startswith("model://"):
+        for model_path in _model_paths:
+            candidate = os.path.join(model_path, uri[len("model://"):])
+            if os.path.exists(candidate):
+                return candidate
+        raise RuntimeError(
+            f"Unable to resolve {uri} in model paths {_model_paths}. Use "
+            "--model-path or set SDF_PATH/GZ_SIM_RESOURCE_PATH")
+    if uri.startswith("file://"):
+        return uri[len("file://"):]
+    if "://" in uri:
+        raise RuntimeError(f"Unsupported URI scheme: {uri}")
+    if os.path.isabs(uri) or not owner_file_path:
+        return uri
+    return os.path.join(os.path.dirname(owner_file_path), uri)
 
 
 def get_asset_filename_on_disk(asset):
